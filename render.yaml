@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: intern hub-backend
+    env: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+
+  - type: web
+    name: intern hub-frontend
+    env: static
+    rootDir: client
+    plan: free
+    buildCommand: npm install && npm run build
+    publishDirectory: build
+
+  # Uncomment for preview environments
+  # - type: web
+  #   name: preview-backend
+  #   env: node
+  #   rootDir: server
+  #   plan: free
+  #   buildCommand: npm install
+  #   startCommand: npm start
