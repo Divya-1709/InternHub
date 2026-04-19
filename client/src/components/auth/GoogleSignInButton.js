@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 const GOOGLE_SCRIPT_ID = "google-identity-services";
+let googleInitialized = false;
 
 const loadGoogleScript = () =>
   new Promise((resolve, reject) => {
@@ -27,6 +28,7 @@ const loadGoogleScript = () =>
 
 const GoogleSignInButton = ({ onCredential, text = "continue_with", disabled = false }) => {
   const buttonRef = useRef(null);
+  const onCredentialRef = useRef(onCredential);
   const [error, setError] = useState("");
   const [buttonWidth, setButtonWidth] = useState(0);
   const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
@@ -57,6 +59,10 @@ const GoogleSignInButton = ({ onCredential, text = "continue_with", disabled = f
   }, []);
 
   useEffect(() => {
+    onCredentialRef.current = onCredential;
+  }, [onCredential]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const initialize = async () => {
@@ -71,10 +77,13 @@ const GoogleSignInButton = ({ onCredential, text = "continue_with", disabled = f
         }
 
         buttonRef.current.innerHTML = "";
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: (response) => onCredential?.(response.credential)
-        });
+        if (!googleInitialized) {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: (response) => onCredentialRef.current?.(response.credential)
+          });
+          googleInitialized = true;
+        }
         window.google.accounts.id.renderButton(buttonRef.current, {
           type: "standard",
           theme: "outline",
@@ -93,7 +102,7 @@ const GoogleSignInButton = ({ onCredential, text = "continue_with", disabled = f
     return () => {
       cancelled = true;
     };
-  }, [buttonWidth, clientId, onCredential, text]);
+  }, [buttonWidth, clientId, text]);
 
   if (!clientId) {
     return (
