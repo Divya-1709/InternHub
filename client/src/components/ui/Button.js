@@ -7,13 +7,15 @@ export function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-const Button = React.forwardRef(({ className, variant = 'primary', size = 'md', children, isLoading, ...props }, ref) => {
+const Button = React.forwardRef(({ className, variant = 'primary', color, size = 'md', children, isLoading, ...props }, ref) => {
+  const resolvedVariant = color === 'danger' && variant === 'outline' ? 'dangerOutline' : variant;
   const variants = {
     primary: 'bg-[var(--brand-primary)] text-[var(--text-inverse)] hover:bg-[var(--brand-primary-hover)] shadow-sm border border-transparent',
     secondary: 'bg-[var(--bg-secondary)] text-[var(--text-primary)] border-[var(--border-color)] hover:bg-[var(--bg-hover)] shadow-sm border',
     outline: 'bg-transparent border-[var(--border-color)] text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] border',
     ghost: 'bg-transparent text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] border-transparent',
     danger: 'bg-[var(--accent-danger)] text-[var(--text-inverse)] hover:bg-[var(--accent-danger-hover)] shadow-sm border border-transparent',
+    dangerOutline: 'bg-transparent border-[var(--accent-danger)] text-[var(--accent-danger)] hover:bg-[var(--error-bg)] border',
   };
 
   const sizes = {
@@ -28,7 +30,7 @@ const Button = React.forwardRef(({ className, variant = 'primary', size = 'md', 
       ref={ref}
       className={cn(
         'inline-flex items-center justify-center rounded-lg font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 disabled:opacity-50 disabled:pointer-events-none',
-        variants[variant],
+        variants[resolvedVariant],
         sizes[size],
         className
       )}

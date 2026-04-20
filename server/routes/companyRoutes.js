@@ -8,8 +8,10 @@ const User = require("../models/User");
 const StudentProfile = require("../models/Studentprofilemodel");
 const Task = require("../models/Task");
 const Application = require("../models/Application");
-const nodemailer = require("nodemailer");
+const Internship = require("../models/Internship");
 const authMiddleware = require("../middleware/authMiddleware");
+const roleMiddleware = require("../middleware/roleMiddleware");
+const { sendEmail } = require("../utils/email");
 
 // Multer storage config for company images
 const uploadDir = path.join(__dirname, "..", "uploads", "company-images");
@@ -66,7 +68,7 @@ router.post("/register", authMiddleware, async (req, res) => {
 });
 
 // Get all companies (for admin)
-router.get("/all", async (req, res) => {
+router.get("/all", authMiddleware, roleMiddleware("admin"), async (req, res) => {
   try {
     const companies = await Company.find().populate("userId", "email");
     res.json(companies);
@@ -76,7 +78,7 @@ router.get("/all", async (req, res) => {
 });
 
 // Verify company (admin only)
-router.put("/verify/:id", authMiddleware, async (req, res) => {
+router.put("/verify/:id", authMiddleware, roleMiddleware("admin"), async (req, res) => {
   try {
     const { status } = req.body;
 
@@ -88,10 +90,29 @@ router.put("/verify/:id", authMiddleware, async (req, res) => {
       req.params.id,
       { status },
       { new: true }
-    );
+    ).populate("userId", "email name");
 
     if (!company) {
       return res.status(404).json({ message: "Company not found" });
+    }
+
+    await User.findByIdAndUpdate(company.userId?._id || company.userId, {
+      isVerified: status === "Verified"
+    });
+
+    if (company.email || company.userId?.email) {
+      await sendEmail({
+        to: company.email || company.userId.email,
+        subject: `InternHub company verification ${status}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+            <h2>Company verification update</h2>
+            <p>Hello ${company.companyName},</p>
+            <p>Your company verification status has been updated to <strong>${status}</strong>.</p>
+            <p>If you need help, please contact the InternHub support team.</p>
+          </div>
+        `
+      });
     }
 
     res.json({ message: "Company status updated", company });
@@ -101,7 +122,7 @@ router.put("/verify/:id", authMiddleware, async (req, res) => {
 });
 
 // Get all registered students with profiles
-router.get("/students", authMiddleware, async (req, res) => {
+router.get("/students", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
     // Get all users with role 'student'
     const students = await User.find({ role: "student" }).select("-password");
@@ -133,7 +154,7 @@ router.get("/students", authMiddleware, async (req, res) => {
 });
 
 // Send email notification to student when shortlisted/approved
-router.post("/notify-student", authMiddleware, async (req, res) => {
+router.post("/notify-student", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
     const { applicationId, status } = req.body;
     
@@ -151,16 +172,11 @@ router.post("/notify-student", authMiddleware, async (req, res) => {
     if (!application) {
       return res.status(404).json({ message: "Application not found" });
     }
-    
-    // Configure email transporter (using Gmail as example)
-    // IMPORTANT: Set up environment variables for email credentials
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD
-      }
-    });
+
+    const company = await Company.findOne({ userId: req.user.id });
+    if (!company || String(application.internshipId.companyId._id) !== String(company._id)) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
     
     let subject = "";
     let message = "";
@@ -199,15 +215,11 @@ router.post("/notify-student", authMiddleware, async (req, res) => {
       `;
     }
     
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
+    await sendEmail({
       to: application.studentId.email,
-      subject: subject,
+      subject,
       html: message
-    };
-    
-    // Send email
-    await transporter.sendMail(mailOptions);
+    });
     
     res.json({ message: "Notification sent successfully" });
   } catch (err) {
@@ -218,7 +230,7 @@ router.post("/notify-student", authMiddleware, async (req, res) => {
 });
 
 // Assign task to student
-router.post("/assign-task", authMiddleware, async (req, res) => {
+router.post("/assign-task", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
     const {
       applicationId,
@@ -234,6 +246,24 @@ router.post("/assign-task", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Please provide all required fields" });
     }
     
+    const company = await Company.findOne({ userId: req.user.id });
+    if (!company) {
+      return res.status(404).json({ message: "Company profile not found" });
+    }
+
+    const application = await Application.findById(applicationId).populate("internshipId");
+    if (!application) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+
+    if (String(application.internshipId.companyId) !== String(company._id)) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    if (String(application.studentId) !== String(studentId) || String(application.internshipId._id) !== String(internshipId)) {
+      return res.status(400).json({ message: "Task details do not match the selected application" });
+    }
+
     const task = new Task({
       companyId: req.user.id,
       studentId,
@@ -250,7 +280,7 @@ router.post("/assign-task", authMiddleware, async (req, res) => {
     // Send email notification to student about new task
     try {
       const student = await User.findById(studentId);
-      const application = await Application.findById(applicationId)
+      const populatedApplication = await Application.findById(applicationId)
         .populate("internshipId")
         .populate({
           path: "internshipId",
@@ -259,23 +289,13 @@ router.post("/assign-task", authMiddleware, async (req, res) => {
             select: "companyName"
           }
         });
-      
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASSWORD
-        }
-      });
-      
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
+      await sendEmail({
         to: student.email,
         subject: `New Task Assigned: ${title}`,
         html: `
           <h2>New Task Assignment</h2>
           <p>Hello ${student.name},</p>
-          <p>You have been assigned a new task for your <strong>${application.internshipId.title}</strong> internship at <strong>${application.internshipId.companyId.companyName}</strong>.</p>
+          <p>You have been assigned a new task for your <strong>${populatedApplication.internshipId.title}</strong> internship at <strong>${populatedApplication.internshipId.companyId.companyName}</strong>.</p>
           <h3>Task Details:</h3>
           <p><strong>Title:</strong> ${title}</p>
           <p><strong>Description:</strong> ${description}</p>
@@ -283,11 +303,9 @@ router.post("/assign-task", authMiddleware, async (req, res) => {
           <p><strong>Priority:</strong> ${priority}</p>
           <p>Please log in to your dashboard to view full details and submit your work.</p>
           <p>Good luck!</p>
-          <p>Best regards,<br>${application.internshipId.companyId.companyName} Team</p>
+          <p>Best regards,<br>${populatedApplication.internshipId.companyId.companyName} Team</p>
         `
-      };
-      
-      await transporter.sendMail(mailOptions);
+      });
     } catch (emailErr) {
       console.error("Task notification email failed:", emailErr);
     }
@@ -300,7 +318,7 @@ router.post("/assign-task", authMiddleware, async (req, res) => {
 });
 
 // Get all tasks assigned by company
-router.get("/tasks", authMiddleware, async (req, res) => {
+router.get("/tasks", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
     const tasks = await Task.find({ companyId: req.user.id })
       .populate("studentId", "name email")
@@ -315,7 +333,7 @@ router.get("/tasks", authMiddleware, async (req, res) => {
 });
 
 // Review submitted task
-router.put("/review-task/:taskId", authMiddleware, async (req, res) => {
+router.put("/review-task/:taskId", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
     const { feedback, status } = req.body;
     
@@ -347,7 +365,7 @@ router.put("/review-task/:taskId", authMiddleware, async (req, res) => {
 });
 
 // Get current company's profile
-router.get("/profile", authMiddleware, async (req, res) => {
+router.get("/profile", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
     const company = await Company.findOne({ userId: req.user.id });
     if (!company) {
@@ -361,7 +379,7 @@ router.get("/profile", authMiddleware, async (req, res) => {
 });
 
 // Update company profile (description, website, industry, logo, banner)
-router.put("/update-profile", authMiddleware, async (req, res) => {
+router.put("/update-profile", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
     const { description, website, industry, companyLogo, companyBanner } = req.body;
     const company = await Company.findOne({ userId: req.user.id });
@@ -385,7 +403,7 @@ router.put("/update-profile", authMiddleware, async (req, res) => {
 });
 
 // Upload company image (logo or banner)
-router.post("/upload-image", authMiddleware, upload.single("image"), async (req, res) => {
+router.post("/upload-image", authMiddleware, roleMiddleware("company"), upload.single("image"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: "No image file provided" });

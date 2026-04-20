@@ -3,7 +3,6 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const path = require("path");
 require("dotenv").config();
-const User = require("./models/User");
 
 const app = express();
 
@@ -63,16 +62,6 @@ const connectDB = async () => {
 };
 
 connectDB().then(() => {
-  // Temporary route to list all users for debugging
-  app.get("/api/debug/users", async (req, res) => {
-    try {
-      const users = await User.find({});
-      res.json(users.map(u => ({ email: u.email, role: u.role })));
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
   app.get("/", (req, res) => {
     res.send("Internship Verification Backend Running");
   });
@@ -80,4 +69,3 @@ connectDB().then(() => {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
 });
-

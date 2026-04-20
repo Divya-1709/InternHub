@@ -190,7 +190,7 @@ const MyApplications = () => {
                     )}
                   </CardContent>
                   <CardFooter className="pt-0 border-none bg-transparent">
-                    <Button variant="ghost" className="w-full text-slate-500 hover:text-indigo-600 text-sm h-11" onClick={() => toast.info("View detailed timeline feature coming soon!")}>
+                    <Button variant="ghost" className="w-full text-slate-500 hover:text-indigo-600 text-sm h-11" onClick={() => navigate("/student/interviews")}>
                       View Application History
                       <ChevronRight size={16} className="ml-1" />
                     </Button>

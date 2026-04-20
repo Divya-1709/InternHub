@@ -3,6 +3,7 @@ const Company = require("../models/Company");
 const Internship = require("../models/Internship");
 const Application = require("../models/Application");
 const Payment = require("../models/Payment");
+const StudentProfile = require("../models/Studentprofilemodel");
 
 /* ===========================
    ADMIN DASHBOARD DATA
@@ -75,10 +76,26 @@ exports.getAllApplications = async (req, res) => {
 
 exports.getAllStudents = async (req, res) => {
   try {
-    const students = await User.find({ role: "student" }, "name email")
+    const students = await User.find({ role: "student" }, "name email role")
       .sort({ createdAt: -1 });
 
-    res.json(students);
+    const profiles = await StudentProfile.find({
+      userId: { $in: students.map((student) => student._id) }
+    });
+
+    const profileMap = new Map(
+      profiles.map((profile) => [String(profile.userId), profile])
+    );
+
+    res.json(
+      students.map((student) => ({
+        _id: student._id,
+        name: student.name,
+        email: student.email,
+        role: student.role,
+        profile: profileMap.get(String(student._id)) || null
+      }))
+    );
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

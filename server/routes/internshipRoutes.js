@@ -4,7 +4,8 @@ const roleMiddleware = require("../middleware/roleMiddleware");
 const {
   postInternship,
   getAllInternships,
-  getMyInternships
+  getMyInternships,
+  deleteInternship
 } = require("../controllers/internshipController");
 
 const router = express.Router();
@@ -31,6 +32,13 @@ router.get(
   authMiddleware,
   roleMiddleware("company"),
   getMyInternships
+);
+
+router.delete(
+  "/delete/:id",
+  authMiddleware,
+  roleMiddleware("company"),
+  deleteInternship
 );
 
 module.exports = router;

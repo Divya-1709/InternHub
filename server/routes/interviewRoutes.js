@@ -3,20 +3,13 @@ const router = express.Router();
 const Interview = require("../models/Interview");
 const Application = require("../models/Application");
 const User = require("../models/User");
-const nodemailer = require("nodemailer");
+const Company = require("../models/Company");
 const authMiddleware = require("../middleware/authMiddleware");
-
-// Email transporter configuration
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD
-  }
-});
+const roleMiddleware = require("../middleware/roleMiddleware");
+const { sendEmail } = require("../utils/email");
 
 // Schedule an interview (Company)
-router.post("/schedule", authMiddleware, async (req, res) => {
+router.post("/schedule", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
     const {
       applicationId,
@@ -39,10 +32,23 @@ router.post("/schedule", authMiddleware, async (req, res) => {
     // Check if application exists
     const application = await Application.findById(applicationId)
       .populate("studentId", "name email")
-      .populate("internshipId", "title");
+      .populate("internshipId", "title companyId");
 
     if (!application) {
       return res.status(404).json({ message: "Application not found" });
+    }
+
+    const company = await Company.findOne({ userId: req.user.id });
+    if (!company) {
+      return res.status(404).json({ message: "Company profile not found" });
+    }
+
+    if (String(application.internshipId.companyId) !== String(company._id)) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    if (String(application.studentId._id) !== String(studentId) || String(application.internshipId._id) !== String(internshipId)) {
+      return res.status(400).json({ message: "Interview details do not match the selected application" });
     }
 
     // Create interview
@@ -87,8 +93,7 @@ router.post("/schedule", authMiddleware, async (req, res) => {
         <p>Best regards,<br>Internship Platform Team</p>
       `;
 
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
+      await sendEmail({
         to: application.studentId.email,
         subject: `Interview Scheduled - ${application.internshipId.title}`,
         html: emailContent
@@ -108,7 +113,7 @@ router.post("/schedule", authMiddleware, async (req, res) => {
 });
 
 // Get all interviews for company
-router.get("/company", authMiddleware, async (req, res) => {
+router.get("/company", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
     const interviews = await Interview.find({ companyId: req.user.id })
       .populate("studentId", "name email")
@@ -127,7 +132,7 @@ router.get("/company", authMiddleware, async (req, res) => {
 });
 
 // Get all interviews for student
-router.get("/student", authMiddleware, async (req, res) => {
+router.get("/student", authMiddleware, roleMiddleware("student"), async (req, res) => {
   try {
     const interviews = await Interview.find({ studentId: req.user.id })
       .populate({
@@ -198,8 +203,7 @@ router.put("/reschedule/:id", authMiddleware, async (req, res) => {
     const rescheduledBy = isStudent ? "student" : "company";
 
     try {
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
+      await sendEmail({
         to: recipientEmail,
         subject: `Interview Rescheduled - ${interview.internshipId.title}`,
         html: `
@@ -270,8 +274,7 @@ router.put("/cancel/:id", authMiddleware, async (req, res) => {
     const recipientName = isStudent ? interview.companyId.name : interview.studentId.name;
 
     try {
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
+      await sendEmail({
         to: recipientEmail,
         subject: `Interview Cancelled - ${interview.internshipId.title}`,
         html: `
@@ -294,7 +297,7 @@ router.put("/cancel/:id", authMiddleware, async (req, res) => {
 });
 
 // Submit interview feedback (Company)
-router.put("/feedback/:id", authMiddleware, async (req, res) => {
+router.put("/feedback/:id", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
     const { rating, comments, strengths, improvements, recommendation } = req.body;
 
@@ -330,8 +333,7 @@ router.put("/feedback/:id", authMiddleware, async (req, res) => {
 
     // Notify student
     try {
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
+      await sendEmail({
         to: interview.studentId.email,
         subject: `Interview Feedback - ${interview.internshipId.title}`,
         html: `
@@ -354,7 +356,7 @@ router.put("/feedback/:id", authMiddleware, async (req, res) => {
 });
 
 // Mark interview as completed or no-show
-router.put("/status/:id", authMiddleware, async (req, res) => {
+router.put("/status/:id", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
     const { status } = req.body;
 
@@ -402,6 +404,13 @@ router.get("/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "Interview not found" });
     }
 
+    const isStudentOwner = String(interview.studentId?._id || interview.studentId) === String(req.user.id);
+    const isCompanyOwner = String(interview.companyId?._id || interview.companyId) === String(req.user.id);
+
+    if (!isStudentOwner && !isCompanyOwner && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
     res.json(interview);
   } catch (err) {
     console.error(err);
@@ -410,7 +419,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
 });
 
 // Send reminder emails (This should be called by a cron job)
-router.post("/send-reminders", async (req, res) => {
+router.post("/send-reminders", authMiddleware, roleMiddleware("admin"), async (req, res) => {
   try {
     const now = new Date();
     const oneDayLater = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -431,8 +440,7 @@ router.post("/send-reminders", async (req, res) => {
     // Send 24-hour reminders
     for (const interview of oneDayInterviews) {
       try {
-        await transporter.sendMail({
-          from: process.env.EMAIL_USER,
+        await sendEmail({
           to: interview.studentId.email,
           subject: `Interview Reminder - Tomorrow at ${interview.scheduledTime}`,
           html: `

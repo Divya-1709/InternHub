@@ -57,3 +57,26 @@ exports.getMyInternships = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+exports.deleteInternship = async (req, res) => {
+  try {
+    const company = await Company.findOne({ userId: req.user.id });
+
+    if (!company) {
+      return res.status(404).json({ message: "Company not found" });
+    }
+
+    const internship = await Internship.findOneAndDelete({
+      _id: req.params.id,
+      companyId: company._id
+    });
+
+    if (!internship) {
+      return res.status(404).json({ message: "Internship not found" });
+    }
+
+    res.json({ message: "Internship deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

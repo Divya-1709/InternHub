@@ -296,7 +296,7 @@ const InternshipMatcher = () => {
                                     Application Pending
                                   </Button>
                                 )}
-                                <Button variant="ghost" className="px-4" onClick={() => toast.info("Full match breakdown coming soon!")}>
+                                <Button variant="ghost" className="px-4" onClick={() => toast("Match score is based on skills, GPA, and branch relevance.")}>
                                    <BrainCircuit size={18} className="text-slate-400" />
                                 </Button>
                              </div>

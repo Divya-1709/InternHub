@@ -2,7 +2,10 @@ const express = require("express");
 const router = express.Router();
 const Application = require("../models/Application");
 const Internship = require("../models/Internship");
+const Company = require("../models/Company");
+const { sendEmail } = require("../utils/email");
 const authMiddleware = require("../middleware/authMiddleware");
+const roleMiddleware = require("../middleware/roleMiddleware");
 
 // Apply for an internship (Updated to include application details)
 router.post("/apply", authMiddleware, async (req, res) => {
@@ -49,6 +52,7 @@ router.post("/apply", authMiddleware, async (req, res) => {
     const application = new Application({
       studentId: req.user.id,
       internshipId,
+      status: "Pending",
       coverLetter,
       whyInterested,
       relevantExperience,
@@ -86,11 +90,8 @@ router.get("/my", authMiddleware, async (req, res) => {
 });
 
 // Get applications for a company (for company dashboard)
-router.get("/company", authMiddleware, async (req, res) => {
+router.get("/company", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
-    const Company = require("../models/Company");
-    
-    // First find the company using the user's ID
     const company = await Company.findOne({ userId: req.user.id });
     
     if (!company) {
@@ -116,7 +117,7 @@ router.get("/company", authMiddleware, async (req, res) => {
 });
 
 // Update application status (for company)
-router.put("/update/:id", authMiddleware, async (req, res) => {
+router.put("/update/:id", authMiddleware, roleMiddleware("company"), async (req, res) => {
   try {
     const { status } = req.body;
 
@@ -131,7 +132,6 @@ router.put("/update/:id", authMiddleware, async (req, res) => {
     }
 
     // First find the company associated with the logged-in user
-    const Company = require("../models/Company");
     const company = await Company.findOne({ userId: req.user.id });
     
     if (!company) {
@@ -148,7 +148,24 @@ router.put("/update/:id", authMiddleware, async (req, res) => {
       req.params.id,
       { status: status },
       { new: true }
-    ).populate("internshipId");
+    )
+      .populate("internshipId")
+      .populate("studentId", "name email");
+
+    if (updatedApplication?.studentId?.email) {
+      await sendEmail({
+        to: updatedApplication.studentId.email,
+        subject: `Application status updated to ${status}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+            <h2>Application update</h2>
+            <p>Hello ${updatedApplication.studentId.name || "Student"},</p>
+            <p>Your application for <strong>${updatedApplication.internshipId?.title || "the internship"}</strong> is now marked as <strong>${status}</strong>.</p>
+            <p>Please log in to InternHub for the latest details.</p>
+          </div>
+        `
+      });
+    }
 
     res.json({ message: "Application status updated", application: updatedApplication });
   } catch (err) {
@@ -172,6 +189,14 @@ router.get("/:id", authMiddleware, async (req, res) => {
 
     if (!application) {
       return res.status(404).json({ message: "Application not found" });
+    }
+
+    const isStudentOwner = String(application.studentId?._id || application.studentId) === String(req.user.id);
+    const company = await Company.findOne({ userId: req.user.id });
+    const isCompanyOwner = company && String(application.internshipId?.companyId) === String(company._id);
+
+    if (!isStudentOwner && !isCompanyOwner && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Unauthorized" });
     }
 
     res.json(application);

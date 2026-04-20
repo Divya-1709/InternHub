@@ -46,7 +46,7 @@ const CardContent = ({ className, children, ...props }) => {
 
 const CardFooter = ({ className, children, ...props }) => {
   return (
-    <div className={cn('px-6 py-4 bg-[var(--bg-tertiary)] opacity-50 border-t border-[var(--border-color)]', className)} {...props}>
+    <div className={cn('px-6 py-4 bg-[var(--bg-tertiary)] border-t border-[var(--border-color)]', className)} {...props}>
       {children}
     </div>
   );

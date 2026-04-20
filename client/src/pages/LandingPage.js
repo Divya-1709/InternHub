@@ -170,10 +170,10 @@ const LandingPage = () => {
         <div className="mx-auto max-w-7xl px-6">
           <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
             {[
-              { label: "Active Students", value: "10K+" },
-              { label: "Trusted Companies", value: "500+" },
-              { label: "Hired Interns", value: "8.5K+" },
-              { label: "Success Rate", value: "95%" }
+              { label: "Student Workspaces", value: "Live" },
+              { label: "Company Reviews", value: "Managed" },
+              { label: "Interview Flow", value: "Connected" },
+              { label: "Admin Oversight", value: "Active" }
             ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <div className="mb-1 font-heading text-3xl font-semibold text-white">{stat.value}</div>
