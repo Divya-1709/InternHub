@@ -10,7 +10,7 @@ export function cn(...inputs) {
 const Button = React.forwardRef(({ className, variant = 'primary', color, size = 'md', children, isLoading, ...props }, ref) => {
   const resolvedVariant = color === 'danger' && variant === 'outline' ? 'dangerOutline' : variant;
   const variants = {
-    primary: 'bg-[var(--brand-primary)] text-[var(--text-inverse)] hover:bg-[var(--brand-primary-hover)] shadow-sm border border-transparent',
+    primary: 'bg-[var(--accent-primary)] text-[var(--text-inverse)] hover:bg-[var(--accent-primary-hover)] shadow-sm border border-transparent',
     secondary: 'bg-[var(--bg-secondary)] text-[var(--text-primary)] border-[var(--border-color)] hover:bg-[var(--bg-hover)] shadow-sm border',
     outline: 'bg-transparent border-[var(--border-color)] text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] border',
     ghost: 'bg-transparent text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] border-transparent',
